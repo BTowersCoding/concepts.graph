@@ -1,27 +1,34 @@
 (ns exercism.concepts.graph
-  (:require [dorothy.core :as dot]
-            [dorothy.jvm :as dot-jvm]))
+  (:require [ring.adapter.jetty :as jetty]
+            [ring.middleware.resource :refer [wrap-resource]]
+            [com.phronemophobic.clj-graphviz :refer [render-graph]]
+            [hiccup.page :refer [html5]]
+            [clojure.data.json :as json]))
 
-(def clojure-concepts
-  [["Simple Values" ["Numbers" "Booleans" "Symbols" "Keywords" "Strings" "Characters" "Regular Expressions"]]
-   ["Operations" ["Flow Control" "Type Inspection" "Concurrency"]]
-   ["Functions" ["General" "Multifunctions" "Macros" "Java Interop" "Proxies"]]
-   ["Collections" ["Colls" "Vectors" "Lists" "Maps" "Sets" "Structs" "Sequences" "Transients"]]
-   ["Code Structure" ["Variables" "Namespaces" "Hierarchies" "User Defined Types" "Metadata"]]
-   ["Environment" ["Require" "Import" "Code" "IO" "REPL"]]])
+(def exercises (:concept (:exercises (json/read-str (slurp "https://raw.githubusercontent.com/exercism/clojure/main/config.json") :key-fn keyword))))
 
-(defn groups [v]
-  (for [[group _] v]
-    ["Clojure Concepts" group]))
+(defn concept
+  "Returns a sequence of the exercises that teach a concept
+  or have it as a prerequisite, according to key provided."
+  [c k]
+  (map :name (filter #(contains? (set (k %)) c) exercises)))
 
-(defn concepts-graph [v]
-  (for [[group concepts] v]
-    (for [concept concepts]
-      [group concept])))
+(defn nodes [c]
+  (mapv vector (cycle (concept c :concepts))
+       (concept c :prerequisites)))
 
-(comment
-(groups clojure-concepts)
-  (-> (dot/digraph (concat [{:rankdir :LR}] (into (groups clojure-concepts) (concepts-graph clojure-concepts))))
-      dot/dot
-      (dot-jvm/save! "clojure-concepts.png" {:format :png})))
-  
+(render-graph {:edges (vec (mapcat nodes (set (mapcat :concepts exercises))))}
+               {:filename "resources/public/graph.png"})
+
+(def page
+  (html5 {:lang "en"}
+    [:body [:div [:h1 "Clojure syllabus"]
+                 [:img {:src "graph.png"}]]]))
+
+(defn handler [request]
+  {:status 200
+   :headers {"Content-Type" "text/html"}
+   :body page})
+
+(defn -main []
+  (jetty/run-jetty (wrap-resource handler "public") {:port 80}))
