@@ -44,8 +44,6 @@
                 "</form>"))
          "</body></html>"))
 
-(page "clojure")
-
 (defn handler [{{name "name"} :params}]
   (-> (response (page name))
       (content-type "text/html")))
